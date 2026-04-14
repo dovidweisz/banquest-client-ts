@@ -1,0 +1,32 @@
+{
+  "name": "banquest-client-ts",
+  "version": "1.0.0",
+  "description": "An api client for Banquest transactions with a focus on Typescript Types",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dovidweisz/banquest-client-ts.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dovidweisz/banquest-client-ts/issues"
+  },
+  "homepage": "https://github.com/dovidweisz/banquest-client-ts#readme",
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.0",
+    "jest": "^30.3.0",
+    "ts-jest": "^29.4.9",
+    "typescript": "^6.0.2"
+  }
+}
