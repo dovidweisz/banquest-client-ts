@@ -2,8 +2,13 @@ export { BanquestClient } from "./client.js";
 export type {
   BanquestClientConfig,
   BanquestApiError,
-  SimpleTransactionRequest,
-  SimpleTransactionResponse,
-  BillingAddress,
-  TransactionStatus,
+  CreditCardChargeRequest,
+  ChargeResponse,
+  Address,
+  AmountDetails,
+  TransactionDetails,
+  TransactionCustomer,
+  CustomFields,
+  Result,
+  ResultCode,
 } from "./types.js";

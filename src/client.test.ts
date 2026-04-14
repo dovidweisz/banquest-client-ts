@@ -1,7 +1,7 @@
 import { BanquestClient } from "./client";
 import type {
-  SimpleTransactionRequest,
-  SimpleTransactionResponse,
+  CreditCardChargeRequest,
+  ChargeResponse,
   BanquestApiError,
 } from "./types";
 
@@ -9,21 +9,19 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const MOCK_API_KEY = "test-api-key";
-const EXPECTED_AUTH = `Basic ${Buffer.from(`${MOCK_API_KEY}:`).toString("base64")}`;
+const MOCK_SOURCE_KEY = "test-source-key";
+const EXPECTED_AUTH = `Basic ${Buffer.from(`${MOCK_SOURCE_KEY}:`).toString("base64")}`;
 
 function makeSuccessResponse(
-  overrides: Partial<SimpleTransactionResponse> = {},
-): SimpleTransactionResponse {
+  overrides: Partial<ChargeResponse> = {},
+): ChargeResponse {
   return {
-    transaction_id: "txn_abc123",
-    transaction_type: "simple_transaction",
-    status: "approved",
-    response_code: "00",
-    response_text: "Approved",
+    status: "Approved",
+    status_code: "A",
+    auth_amount: 25.0,
     auth_code: "AUTH001",
-    amount: 25.0,
-    card_last_four: "1111",
+    reference_number: 123456,
+    last_4: "1111",
     card_type: "Visa",
     ...overrides,
   };
@@ -42,7 +40,7 @@ function mockFetch(
   return mock;
 }
 
-const minimalRequest: SimpleTransactionRequest = {
+const minimalRequest: CreditCardChargeRequest = {
   amount: 25.0,
   card: "4111111111111111",
   expiry_month: 12,
@@ -66,69 +64,85 @@ describe("BanquestClient", () => {
   describe("constructor", () => {
     it("uses the sandbox URL by default", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await client.simpleTransaction(minimalRequest);
+      await client.charge(minimalRequest);
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe(
-        "https://api.sandbox.banquestgateway.com/api/v2/transactions/",
+        "https://api.sandbox.banquestgateway.com/api/v2/transactions/charge",
       );
     });
 
     it("accepts a custom baseUrl", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
       const client = new BanquestClient({
-        apiKey: MOCK_API_KEY,
-        baseUrl: "https://api.banquestgateway.com/api/v2/transactions/",
+        sourceKey: MOCK_SOURCE_KEY,
+        baseUrl: "https://api.banquestgateway.com/api/v2",
       });
 
-      await client.simpleTransaction(minimalRequest);
+      await client.charge(minimalRequest);
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe(
-        "https://api.banquestgateway.com/api/v2/transactions/",
+        "https://api.banquestgateway.com/api/v2/transactions/charge",
       );
     });
 
     it("appends a trailing slash to baseUrl if missing", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
       const client = new BanquestClient({
-        apiKey: MOCK_API_KEY,
-        baseUrl: "https://api.banquestgateway.com/api/v2/transactions",
+        sourceKey: MOCK_SOURCE_KEY,
+        baseUrl: "https://api.banquestgateway.com/api/v2",
       });
 
-      await client.simpleTransaction(minimalRequest);
+      await client.charge(minimalRequest);
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe(
-        "https://api.banquestgateway.com/api/v2/transactions/",
+        "https://api.banquestgateway.com/api/v2/transactions/charge",
       );
     });
 
-    it("encodes the apiKey as HTTP Basic auth", async () => {
+    it("encodes the sourceKey as HTTP Basic auth with empty password", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await client.simpleTransaction(minimalRequest);
+      await client.charge(minimalRequest);
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect((init.headers as Record<string, string>)["Authorization"]).toBe(
         EXPECTED_AUTH,
       );
     });
+
+    it("encodes the sourceKey and pin as HTTP Basic auth", async () => {
+      const fetchMock = mockFetch(makeSuccessResponse());
+      const expectedAuth = `Basic ${Buffer.from(`${MOCK_SOURCE_KEY}:my-pin`).toString("base64")}`;
+      const client = new BanquestClient({
+        sourceKey: MOCK_SOURCE_KEY,
+        pin: "my-pin",
+      });
+
+      await client.charge(minimalRequest);
+
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+      expect((init.headers as Record<string, string>)["Authorization"]).toBe(
+        expectedAuth,
+      );
+    });
   });
 
   // -------------------------------------------------------------------------
-  // simpleTransaction – happy path
+  // charge – happy path
   // -------------------------------------------------------------------------
 
-  describe("simpleTransaction", () => {
+  describe("charge", () => {
     it("sends a POST request with JSON content-type", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await client.simpleTransaction(minimalRequest);
+      await client.charge(minimalRequest);
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(init.method).toBe("POST");
@@ -139,9 +153,9 @@ describe("BanquestClient", () => {
 
     it("serialises the request body as JSON", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await client.simpleTransaction(minimalRequest);
+      await client.charge(minimalRequest);
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(JSON.parse(init.body as string)).toEqual(minimalRequest);
@@ -150,36 +164,47 @@ describe("BanquestClient", () => {
     it("returns the parsed response on success", async () => {
       const expected = makeSuccessResponse();
       mockFetch(expected);
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      const result = await client.simpleTransaction(minimalRequest);
+      const result = await client.charge(minimalRequest);
 
       expect(result).toEqual(expected);
     });
 
-    it("includes all optional billing fields in the request body", async () => {
+    it("includes all optional fields in the request body", async () => {
       const fetchMock = mockFetch(makeSuccessResponse());
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      const fullRequest: SimpleTransactionRequest = {
+      const fullRequest: CreditCardChargeRequest = {
         ...minimalRequest,
         capture: true,
         save_card: false,
-        billing_first_name: "Jane",
-        billing_last_name: "Doe",
-        billing_address: "123 Main St",
-        billing_city: "Anytown",
-        billing_state: "CA",
-        billing_zip: "90210",
-        billing_country: "US",
-        billing_phone: "555-0100",
-        billing_email: "jane@example.com",
-        order_id: "order-001",
-        customer_id: "cust-001",
-        description: "Test donation",
+        avs_address: "123 Main St",
+        avs_zip: "90210",
+        name: "Jane Doe",
+        billing_info: {
+          first_name: "Jane",
+          last_name: "Doe",
+          street: "123 Main St",
+          city: "Anytown",
+          state: "CA",
+          zip: "90210",
+          country: "US",
+          phone: "555-0100",
+        },
+        customer: {
+          send_receipt: true,
+          email: "jane@example.com",
+          identifier: "cust-001",
+        },
+        transaction_details: {
+          description: "Test donation",
+          order_number: "order-001",
+        },
+        ignore_duplicates: false,
       };
 
-      await client.simpleTransaction(fullRequest);
+      await client.charge(fullRequest);
 
       const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(JSON.parse(init.body as string)).toEqual(fullRequest);
@@ -191,37 +216,37 @@ describe("BanquestClient", () => {
 
     it("throws the parsed API error when the response is not ok (4xx)", async () => {
       const apiError: BanquestApiError = {
-        code: "invalid_card",
-        message: "The card number is invalid.",
+        error_message: "The card number is invalid.",
+        error_code: "invalid_card",
       };
       mockFetch(apiError, 422);
 
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await expect(client.simpleTransaction(minimalRequest)).rejects.toEqual(
+      await expect(client.charge(minimalRequest)).rejects.toEqual(
         apiError,
       );
     });
 
     it("throws the parsed API error when the response is not ok (5xx)", async () => {
       const apiError: BanquestApiError = {
-        code: "gateway_error",
-        message: "An internal error occurred.",
+        error_message: "An internal error occurred.",
+        error_code: "gateway_error",
       };
       mockFetch(apiError, 500);
 
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await expect(client.simpleTransaction(minimalRequest)).rejects.toEqual(
+      await expect(client.charge(minimalRequest)).rejects.toEqual(
         apiError,
       );
     });
 
     it("propagates network errors", async () => {
       global.fetch = jest.fn().mockRejectedValue(new Error("Network failure"));
-      const client = new BanquestClient({ apiKey: MOCK_API_KEY });
+      const client = new BanquestClient({ sourceKey: MOCK_SOURCE_KEY });
 
-      await expect(client.simpleTransaction(minimalRequest)).rejects.toThrow(
+      await expect(client.charge(minimalRequest)).rejects.toThrow(
         "Network failure",
       );
     });

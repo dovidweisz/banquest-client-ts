@@ -2,141 +2,201 @@
  * Configuration for the BanquestClient.
  */
 export interface BanquestClientConfig {
-  /** API key (used as the username in HTTP Basic authentication). */
-  apiKey: string;
+  /**
+   * Source key (used as the username in HTTP Basic authentication).
+   * Create a source key in the gateway at Control Panel > Source Management > Create Key.
+   */
+  sourceKey: string;
+  /**
+   * Pin for the source key (used as the password in HTTP Basic authentication).
+   * Required for some endpoints (e.g. reversal, adjust).
+   */
+  pin?: string;
   /**
    * Base URL for the Banquest Gateway API.
    * Defaults to the sandbox URL when omitted.
-   * @default "https://api.sandbox.banquestgateway.com/api/v2/transactions/"
+   * @default "https://api.sandbox.banquestgateway.com/api/v2"
    */
   baseUrl?: string;
 }
 
 // ---------------------------------------------------------------------------
-// Simple Transaction – Request
+// Shared types
 // ---------------------------------------------------------------------------
 
-/** Billing / shipping address fields shared across transaction types. */
-export interface BillingAddress {
-  /** Cardholder first name. */
-  billing_first_name?: string;
-  /** Cardholder last name. */
-  billing_last_name?: string;
-  /** Street address line 1. */
-  billing_address?: string;
-  /** City. */
-  billing_city?: string;
-  /** State / province (2-letter code for US addresses). */
-  billing_state?: string;
-  /** Postal / ZIP code. */
-  billing_zip?: string;
-  /**
-   * Country code (ISO 3166-1 alpha-2, e.g. "US").
-   * @default "US"
-   */
-  billing_country?: string;
-  /** Contact phone number. */
-  billing_phone?: string;
-  /** Contact e-mail address. */
-  billing_email?: string;
+/** Address fields used for billing and shipping info. */
+export interface Address {
+  first_name?: string;
+  last_name?: string;
+  street?: string;
+  street2?: string;
+  state?: string;
+  city?: string;
+  zip?: string;
+  /** For the Country Blocker fraud module, use ISO 3166-1 alpha-2 codes. */
+  country?: string;
+  phone?: string;
 }
 
+/** Breakdown of the transaction amount for reporting and Level 3 data. */
+export interface AmountDetails {
+  tax?: number;
+  tax_percent?: number;
+  surcharge?: number;
+  shipping?: number;
+  tip?: number;
+  discount?: number;
+}
+
+/** Additional optional transaction details. */
+export interface TransactionDetails {
+  description?: string;
+  clerk?: string;
+  terminal?: string;
+  client_ip?: string;
+  /** Base64-encoded JPEG signature. */
+  signature?: string;
+  invoice_number?: string;
+  po_number?: string;
+  order_number?: string;
+}
+
+/** Customer information to attach to a transaction. */
+export interface TransactionCustomer {
+  send_receipt?: boolean;
+  /** Multiple emails can be sent as a comma-delimited string. */
+  email?: string;
+  fax?: string;
+  /** Something that identifies the customer, e.g. the customer's name or company. */
+  identifier?: string;
+  /** Send a customer ID to link the transaction to an existing customer. */
+  customer_id?: number;
+}
+
+/** Custom fields (custom1 through custom20). */
+export interface CustomFields {
+  [key: string]: string | undefined;
+}
+
+// ---------------------------------------------------------------------------
+// Charge – Request
+// ---------------------------------------------------------------------------
+
 /**
- * Request body for a simple (card-present or card-not-present) charge.
- * Maps directly to the Banquest Gateway API v2 `simple_transaction` payload.
+ * Request body for a credit card charge.
+ * Maps to the Banquest Gateway API v2 POST /transactions/charge endpoint
+ * (CreditCardChargeRequest schema).
  */
-export interface SimpleTransactionRequest extends BillingAddress {
-  /** Transaction amount (e.g. `25.00`). */
+export interface CreditCardChargeRequest {
+  /** Transaction amount in USD (min 0.01, max 20000000). */
   amount: number;
-  /** 16-digit credit / debit card number (PAN). */
+  /** Credit card number (14–16 digits). */
   card: string;
-  /** Card expiry month (1–12). */
+  /** Card expiration month (1–12). */
   expiry_month: number;
-  /** 4-digit card expiry year (e.g. `2026`). */
+  /** Card expiration year (e.g. 2026). */
   expiry_year: number;
-  /** Card Verification Value 2 (3–4 digits). */
-  cvv2: string;
+  /** CVV2/CVC/CID security code (3–4 digits). */
+  cvv2?: string;
+  /** Billing address for AVS verification. */
+  avs_address?: string;
+  /** Billing zip code for AVS verification. */
+  avs_zip?: string;
   /**
-   * When `true` the transaction is authorised **and** captured immediately.
-   * Set to `false` to authorise only.
+   * Whether to capture the authorization into the current batch.
    * @default true
    */
   capture?: boolean;
   /**
-   * When `true` the gateway tokenises the card and returns a `card_id` that
-   * can be used for future charges.
+   * If true and the transaction is approved, a token (card_ref) will be issued for future use.
    * @default false
    */
   save_card?: boolean;
-  /** Optional merchant-supplied order reference. */
-  order_id?: string;
-  /** Optional merchant-supplied customer reference. */
-  customer_id?: string;
-  /** Free-text description shown on statements. */
-  description?: string;
+  /** Name on the card. */
+  name?: string;
+  /** Breakdown of the amount for reporting and Level 3 data. */
+  amount_details?: AmountDetails;
+  /** Additional transaction details. */
+  transaction_details?: TransactionDetails;
+  /** Billing address information. */
+  billing_info?: Address;
+  /** Shipping address information. */
+  shipping_info?: Address;
+  /** Custom fields (custom1–custom20). */
+  custom_fields?: CustomFields;
+  /**
+   * Whether to override duplicate transaction detection.
+   * @default false
+   */
+  ignore_duplicates?: boolean;
+  /** Customer information to attach to the transaction. */
+  customer?: TransactionCustomer;
 }
 
 // ---------------------------------------------------------------------------
-// Simple Transaction – Response
+// Charge – Response
 // ---------------------------------------------------------------------------
 
-/**
- * High-level result of a transaction attempt.
- */
-export type TransactionStatus = "approved" | "declined" | "error" | "pending";
+/** Status of the transaction. */
+export type Result =
+  | "Approved"
+  | "Partially Approved"
+  | "Submitted"
+  | "Declined"
+  | "Error";
+
+/** Single-character result code. */
+export type ResultCode = "A" | "P" | "D" | "E";
 
 /**
- * Response body returned by the Banquest Gateway API v2 after a
- * `simple_transaction` request.
+ * Response body returned by POST /transactions/charge for a credit card charge.
  */
-export interface SimpleTransactionResponse {
-  /** Unique identifier assigned to the transaction by the gateway. */
-  transaction_id: string;
-  /** Echo of the transaction type – always `"simple_transaction"`. */
-  transaction_type: string;
-  /** Approved / declined / error status. */
-  status: TransactionStatus;
-  /** Processor response code. */
-  response_code: string;
-  /** Human-readable processor response message. */
-  response_text: string;
-  /** Authorization code issued by the issuing bank (present when approved). */
+export interface ChargeResponse {
+  /** API version. */
+  version?: string;
+  /** Transaction result status. */
+  status: Result;
+  /** Single-character result code. */
+  status_code: ResultCode;
+  /** Error or processor response message. */
+  error_message?: string;
+  /** Error or processor response code. */
+  error_code?: string;
+  /** Additional error details; may be a string or field-level validation errors. */
+  error_details?: string | Record<string, string[]>;
+  /** Final amount authorized by the processor. */
+  auth_amount?: number;
+  /** Authorization code from the processor (present when approved). */
   auth_code?: string;
-  /** Approved transaction amount. */
-  amount: number;
-  /** Gateway-issued token for the saved card (`save_card: true` only). */
-  card_id?: string;
-  /** Last four digits of the card number. */
-  card_last_four?: string;
-  /** Card brand (e.g. `"Visa"`, `"Mastercard"`). */
-  card_type?: string;
-  /** Processor / acquirer reference number. */
-  reference_number?: string;
-  /** ISO 8601 UTC timestamp of when the transaction was processed. */
-  created_at?: string;
-  /**
-   * AVS (Address Verification System) result code.
-   * Present when billing address fields are supplied.
-   */
+  /** Reference number for the transaction. */
+  reference_number?: number;
+  /** AVS result description. */
   avs_result?: string;
-  /**
-   * CVV match result code.
-   * `"M"` = match, `"N"` = no match, `"P"` = not processed.
-   */
-  cvv_result?: string;
-  /** Raw gateway response object for advanced use-cases. */
-  raw?: Record<string, unknown>;
+  /** AVS result code. */
+  avs_result_code?: string;
+  /** CVV2 result description. */
+  cvv2_result?: string;
+  /** CVV2 result code. */
+  cvv2_result_code?: string;
+  /** Card brand (e.g. "Visa", "MasterCard"). */
+  card_type?: string;
+  /** Last 4 digits of the card number. */
+  last_4?: string;
+  /** Token for the saved card (returned when save_card is true). */
+  card_ref?: string;
+  /** Full transaction object. */
+  transaction?: Record<string, unknown>;
 }
 
 /**
- * Error shape returned by the Banquest Gateway API when the request itself is
+ * Error shape returned by the Banquest Gateway API when the request is
  * invalid (HTTP 4xx) or the gateway encounters an internal fault (HTTP 5xx).
  */
 export interface BanquestApiError {
-  /** Machine-readable error code. */
-  code: string;
-  /** Human-readable error description. */
-  message: string;
-  /** Per-field validation errors (present on HTTP 422). */
-  errors?: Record<string, string[]>;
+  /** Error or processor response message. */
+  error_message: string;
+  /** Error or processor response code. */
+  error_code?: string;
+  /** Additional error details; may be a string or field-level validation errors. */
+  error_details?: string | Record<string, string[]>;
 }

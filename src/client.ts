@@ -1,30 +1,35 @@
 import type {
   BanquestClientConfig,
   BanquestApiError,
-  SimpleTransactionRequest,
-  SimpleTransactionResponse,
+  CreditCardChargeRequest,
+  ChargeResponse,
 } from "./types.js";
 
 export type {
   BanquestClientConfig,
   BanquestApiError,
-  SimpleTransactionRequest,
-  SimpleTransactionResponse,
-  BillingAddress,
-  TransactionStatus,
+  CreditCardChargeRequest,
+  ChargeResponse,
+  Address,
+  AmountDetails,
+  TransactionDetails,
+  TransactionCustomer,
+  CustomFields,
+  Result,
+  ResultCode,
 } from "./types.js";
 
 const DEFAULT_BASE_URL =
-  "https://api.sandbox.banquestgateway.com/api/v2/transactions/";
+  "https://api.sandbox.banquestgateway.com/api/v2";
 
 /**
  * Lightweight, fetch-based client for the Banquest Gateway API v2.
  *
  * @example
  * ```typescript
- * const client = new BanquestClient({ apiKey: "my-api-key" });
+ * const client = new BanquestClient({ sourceKey: "my-source-key" });
  *
- * const result = await client.simpleTransaction({
+ * const result = await client.charge({
  *   amount: 25.00,
  *   card: "4111111111111111",
  *   expiry_month: 12,
@@ -39,21 +44,23 @@ export class BanquestClient {
 
   constructor(config: BanquestClientConfig) {
     this.baseUrl = (config.baseUrl ?? DEFAULT_BASE_URL).replace(/\/?$/, "/");
-    // HTTP Basic auth: apiKey is used as the username with an empty password.
-    this.authHeader = `Basic ${Buffer.from(`${config.apiKey}:`).toString("base64")}`;
+    // HTTP Basic auth: source key is the username, pin (if set) is the password.
+    const password = config.pin ?? "";
+    this.authHeader = `Basic ${Buffer.from(`${config.sourceKey}:${password}`).toString("base64")}`;
   }
 
   /**
-   * Submits a simple card transaction to the Banquest Gateway.
+   * Submits a credit card charge to the Banquest Gateway.
+   * POST /transactions/charge
    *
-   * @param request - Transaction details including card data and amount.
+   * @param request - Charge details including card data and amount.
    * @returns Resolved with the gateway response on success.
    * @throws {@link BanquestApiError} when the gateway returns an error status.
    */
-  async simpleTransaction(
-    request: SimpleTransactionRequest,
-  ): Promise<SimpleTransactionResponse> {
-    const response = await fetch(this.baseUrl, {
+  async charge(
+    request: CreditCardChargeRequest,
+  ): Promise<ChargeResponse> {
+    const response = await fetch(`${this.baseUrl}transactions/charge`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -69,6 +76,6 @@ export class BanquestClient {
       throw apiError;
     }
 
-    return json as SimpleTransactionResponse;
+    return json as ChargeResponse;
   }
 }
