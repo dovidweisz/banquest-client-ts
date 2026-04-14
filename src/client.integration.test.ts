@@ -253,4 +253,24 @@ describeIntegration("BanquestClient integration", () => {
       expect(err.error_message).toBeDefined();
     }
   });
+
+  it("declines a $105.00 charge on test card 4761530001111118", async () => {
+    const request: CreditCardChargeRequest = {
+      amount: 105.00,
+      card: "4761530001111118",
+      expiry_month: 12,
+      expiry_year: 2028,
+      cvv2: "999",
+      ignore_duplicates: true,
+    };
+
+    try {
+      const response = await client.charge(request);
+      expect(response.status).toBe("Declined");
+      expect(response.status_code).toBe("D");
+    } catch (error: unknown) {
+      const err = error as { error_message?: string };
+      expect(err.error_message).toBeDefined();
+    }
+  });
 });
