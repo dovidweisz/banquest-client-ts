@@ -1,6 +1,6 @@
 # banquest-client-ts
 
-A lightweight, fully typed TypeScript client for the [Banquest Gateway API v2](https://api.sandbox.banquestgateway.com/api/v2). Uses the native `fetch` API with no runtime dependencies.
+A lightweight, *Unoficial* fully typed TypeScript client for the [Banquest Gateway API v2](https://api.sandbox.banquestgateway.com/api/v2). Uses the native `fetch` API with no runtime dependencies.
 
 ## Installation
 
